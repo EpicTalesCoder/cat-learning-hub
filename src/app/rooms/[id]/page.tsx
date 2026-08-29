@@ -38,11 +38,11 @@ const POMODORO_WORK = 25 * 60
 const POMODORO_BREAK = 5 * 60
 
 interface RoomPageProps {
-  params: Promise<{ id: string }>
+  params: { id: string }
 }
 
 export default function RoomPage({ params }: RoomPageProps) {
-  const { id } = React.use(params)
+  const { id } = params
   const { data: session } = useSession()
   const router = useRouter()
 
