@@ -1,14 +1,58 @@
+# Environment variables
 .env
+.env.*
+!.env.example
 .env.local
 .env.*.local
+
+# Dependencies
 node_modules/
+/.pnp
+.pnp.js
+
+# Next.js build output
 .next/
 out/
 build/
-.DS_Store
-*.pem
+dist/
+
+# Prisma
+prisma/*.db
+prisma/*.db-journal
+prisma/dev.db
+prisma/dev.db-journal
+
+# Logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.vercel
+pnpm-debug.log*
+*.log
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.pem
+
+# Deployment / hosting
+.vercel/
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Cache / temp
+.cache/
+.temp/
+.tmp/
+
+# Local uploads (if any)
+uploads/
+public/uploads/
 
