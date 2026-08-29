@@ -3,7 +3,7 @@
 import { useSession, signOut } from 'next-auth/react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Cat, LayoutDashboard, LogOut } from 'lucide-react'
+import { Cat, LayoutDashboard, LogOut, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { generateAvatar } from '@/lib/utils'
 
@@ -16,6 +16,7 @@ export function Navbar({ user }: NavbarProps) {
 
   const navLinks = [
     { href: '/dashboard', label: 'Phòng học', icon: LayoutDashboard },
+    { href: '/dashboard/settings', label: 'Cài đặt', icon: Settings },
   ]
 
   return (
