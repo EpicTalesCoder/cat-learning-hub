@@ -51,12 +51,12 @@ export function Navbar({ user }: NavbarProps) {
 
         {/* User menu */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
+          <Link href={`/users/${user.id}`} className="flex items-center gap-2 rounded-lg p-1 transition-colors hover:bg-white/5">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand/20 text-xs font-bold text-brand-light">
               {generateAvatar(user.name)}
             </div>
             <span className="hidden text-sm text-gray-300 sm:block">{user.name}</span>
-          </div>
+          </Link>
           <button
             onClick={() => signOut({ callbackUrl: '/' })}
             className="rounded-lg p-2 text-gray-400 hover:bg-white/5 hover:text-white transition-colors"

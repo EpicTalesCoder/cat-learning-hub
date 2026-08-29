@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import {
@@ -395,9 +396,10 @@ export default function RoomPage({ params }: RoomPageProps) {
               activeMembers.map((member) => {
                 const isYou = member.userId === session?.user?.id
                 return (
-                  <div
+                  <Link
                     key={member.userId}
-                    className="flex items-center gap-3 rounded-xl p-2.5 hover:bg-white/5"
+                    href={`/users/${member.userId}`}
+                    className="flex items-center gap-3 rounded-xl p-2.5 transition-colors hover:bg-white/5"
                   >
                     <div className="relative">
                       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand/20 text-xs font-bold text-brand-light">
@@ -416,7 +418,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                         {room.owner.id === member.userId ? 'Chủ phòng' : 'Thành viên'}
                       </p>
                     </div>
-                  </div>
+                  </Link>
                 )
               })
             )}
