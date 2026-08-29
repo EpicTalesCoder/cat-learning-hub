@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import io, { Socket } from 'socket.io-client'
 import {
   ArrowLeft,
   Users,
@@ -52,6 +53,9 @@ export default function RoomPage({ params }: RoomPageProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  // Socket.IO
+  const socketRef = useRef<Socket | null>(null)
+
   // Timer state
   const [mode, setMode] = useState<TimerMode>('pomodoro')
   const [timerState, setTimerState] = useState<TimerState>('idle')
@@ -66,21 +70,93 @@ export default function RoomPage({ params }: RoomPageProps) {
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
   const heartbeatRef = useRef<NodeJS.Timeout | null>(null)
 
+  // Initialize Socket.IO connection
+  useEffect(() => {
+    const socket = io(undefined, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 5,
+    })
+
+    socket.on('connect', () => {
+      console.log('[Socket.IO] Connected:', socket.id)
+    })
+
+    // Listen for member joined
+    socket.on('member-joined', (data: any) => {
+      console.log('[Socket.IO] Member joined:', data)
+      // Refresh members from server
+      fetchRoomMembers()
+    })
+
+    // Listen for member left
+    socket.on('member-left', (data: any) => {
+      console.log('[Socket.IO] Member left:', data)
+      fetchRoomMembers()
+    })
+
+    // Listen for member active (heartbeat)
+    socket.on('member-active', (data: any) => {
+      console.log('[Socket.IO] Member active:', data)
+      fetchRoomMembers()
+    })
+
+    socket.on('disconnect', () => {
+      console.log('[Socket.IO] Disconnected')
+    })
+
+    socket.on('error', (error) => {
+      console.error('[Socket.IO] Error:', error)
+    })
+
+    socketRef.current = socket
+
+    return () => {
+      socket.disconnect()
+    }
+  }, [])
+
+  // Fetch room members
+  const fetchRoomMembers = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/rooms/${id}`)
+      if (res.ok) {
+        const data = await res.json()
+        setMembers(data.room.members)
+      }
+    } catch (err) {
+      console.error('[Fetch] Error fetching members:', err)
+    }
+  }, [id])
+
   // Load room
   useEffect(() => {
     async function load() {
       try {
         // Join room first
-        await fetch(`/api/rooms/${id}`, { method: 'POST' })
+        const joinRes = await fetch(`/api/rooms/${id}`, { method: 'POST' })
+        if (!joinRes.ok) {
+          setError('Phòng không tồn tại hoặc bạn không có quyền vào')
+          setLoading(false)
+          return
+        }
 
         const res = await fetch(`/api/rooms/${id}`)
         if (!res.ok) {
           setError('Phòng không tồn tại hoặc bạn không có quyền vào')
+          setLoading(false)
           return
         }
         const data = await res.json()
         setRoom(data.room)
         setMembers(data.room.members)
+
+        // Emit join-room event to Socket.IO
+        if (socketRef.current && session?.user?.id) {
+          socketRef.current.emit('join-room', id, session.user.id)
+        }
 
         // Start study session
         const sessRes = await fetch('/api/sessions/start', {
@@ -93,22 +169,27 @@ export default function RoomPage({ params }: RoomPageProps) {
           sessionIdRef.current = sessData.session.id
           sessionStartRef.current = new Date()
         }
-      } catch {
+      } catch (err) {
+        console.error('[Load] Error:', err)
         setError('Lỗi kết nối')
       } finally {
         setLoading(false)
       }
     }
     load()
-  }, [id])
+  }, [id, session])
 
   // Presence heartbeat (every 30s)
   useEffect(() => {
     async function ping() {
-      const res = await fetch(`/api/rooms/${id}/presence`, { method: 'PATCH' })
-      if (res.ok) {
-        const data = await res.json()
-        setMembers(data.members)
+      try {
+        const res = await fetch(`/api/rooms/${id}/presence`, { method: 'PATCH' })
+        if (res.ok) {
+          const data = await res.json()
+          setMembers(data.members)
+        }
+      } catch (err) {
+        console.error('[Heartbeat] Error:', err)
       }
     }
     ping()
@@ -121,29 +202,38 @@ export default function RoomPage({ params }: RoomPageProps) {
   // End study session on leave
   const endSession = useCallback(async () => {
     if (!sessionIdRef.current || !sessionStartRef.current) return
-    const durationMinutes = Math.floor(
-      (Date.now() - sessionStartRef.current.getTime()) / 60_000
-    )
-    await fetch(`/api/sessions/${sessionIdRef.current}/end`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ durationMinutes }),
-    })
+    try {
+      const durationMinutes = Math.floor(
+        (Date.now() - sessionStartRef.current.getTime()) / 60_000
+      )
+      await fetch(`/api/sessions/${sessionIdRef.current}/end`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ durationMinutes }),
+      })
+    } catch (err) {
+      console.error('[EndSession] Error:', err)
+    }
   }, [])
 
   useEffect(() => {
     return () => {
       endSession()
+      // Emit leave-room event
+      if (socketRef.current && session?.user?.id) {
+        socketRef.current.emit('leave-room', id, session.user.id)
+      }
     }
-  }, [endSession])
+  }, [endSession, id, session])
 
   // Auto-start countdown when entering break
   useEffect(() => {
     if (timerState === 'break') {
       setSeconds(POMODORO_BREAK)
-      // Don't auto-start; let user press play after break
     }
   }, [timerState])
+
+  // Timer interval
   useEffect(() => {
     if (timerState !== 'running') {
       if (intervalRef.current) clearInterval(intervalRef.current)
@@ -162,7 +252,6 @@ export default function RoomPage({ params }: RoomPageProps) {
           return s - 1
         })
       } else {
-        // free mode: count up
         setElapsed((e) => e + 1)
       }
     }, 1000)
@@ -222,9 +311,7 @@ export default function RoomPage({ params }: RoomPageProps) {
   }
 
   const displayTime =
-    mode === 'pomodoro'
-      ? formatTimer(seconds)
-      : formatTimer(elapsed)
+    mode === 'pomodoro' ? formatTimer(seconds) : formatTimer(elapsed)
 
   const pomodoroProgress =
     mode === 'pomodoro'
@@ -232,9 +319,6 @@ export default function RoomPage({ params }: RoomPageProps) {
       : 0
 
   const isBreak = timerState === 'break'
-  const activeMembers = members.filter(
-    (m) => Date.now() - new Date(m.lastSeen).getTime() < 2 * 60 * 1000
-  )
 
   return (
     <div className="flex h-[calc(100vh-65px)] flex-col lg:flex-row">
@@ -384,16 +468,16 @@ export default function RoomPage({ params }: RoomPageProps) {
           <div className="mb-4 flex items-center gap-2 text-sm font-medium text-gray-300">
             <Users className="h-4 w-4" />
             Đang trong phòng
-            <span className="ml-auto rounded-full bg-brand/10 px-2 py-0.5 text-xs text-brand-light">
-              {activeMembers.length}
+            <span className="ml-auto rounded-full bg-brand/10 px-2 py-0.5 text-xs text-brand-light font-medium">
+              {members.length}
             </span>
           </div>
 
           <div className="space-y-2">
-            {activeMembers.length === 0 ? (
+            {members.length === 0 ? (
               <p className="text-xs text-gray-600 text-center py-4">Chưa ai online</p>
             ) : (
-              activeMembers.map((member) => {
+              members.map((member) => {
                 const isYou = member.userId === session?.user?.id
                 return (
                   <Link
