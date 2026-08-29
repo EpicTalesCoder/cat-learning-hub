@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { publishRoomUpdate } from '@/lib/redis'
+import { getIO } from '@/lib/socket'
 
 // PATCH /api/rooms/[id]/presence — update lastSeen (heartbeat)
 export async function PATCH(
@@ -15,10 +17,36 @@ export async function PATCH(
 
   const { id } = await params
 
-  await prisma.roomMember.upsert({
+  // Update current user's lastSeen
+  const memberRecord = await prisma.roomMember.upsert({
     where: { roomId_userId: { roomId: id, userId: session.user.id } },
     create: { roomId: id, userId: session.user.id },
     update: { lastSeen: new Date() },
+    include: { user: { select: { id: true, name: true } } },
+  })
+
+  // Publish to Redis for real-time updates
+  await publishRoomUpdate(id, {
+    event: 'member-active',
+    userId: session.user.id,
+    userName: memberRecord.user.name,
+    timestamp: new Date(),
+  })
+
+  // Broadcast via WebSocket
+  getIO()?.to(`room:${id}`).emit('member-active', {
+    userId: session.user.id,
+    userName: memberRecord.user.name,
+    timestamp: new Date(),
+  })
+
+  // Clean up members inactive for more than 30 days
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+  await prisma.roomMember.deleteMany({
+    where: {
+      roomId: id,
+      lastSeen: { lt: thirtyDaysAgo },
+    },
   })
 
   // Return members active in last 2 minutes
