@@ -1,0 +1,74 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  ownedRooms  Room[]       @relation("owner")
+  memberships RoomMember[]
+  sessions    StudySession[]
+
+  @@index([email])
+}
+
+model Room {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  ownerId     String
+  isPrivate   Boolean  @default(false)
+  inviteCode  String   @unique @default(cuid())
+  maxMembers  Int      @default(20)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner    User         @relation("owner", fields: [ownerId], references: [id])
+  members  RoomMember[]
+  sessions StudySession[]
+
+  @@index([ownerId])
+  @@index([inviteCode])
+}
+
+model RoomMember {
+  id       String   @id @default(cuid())
+  roomId   String
+  userId   String
+  joinedAt DateTime @default(now())
+  lastSeen DateTime @default(now())
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([roomId, userId])
+  @@index([roomId, lastSeen])
+}
+
+model StudySession {
+  id              String    @id @default(cuid())
+  userId          String
+  roomId          String
+  startedAt       DateTime  @default(now())
+  endedAt         DateTime?
+  durationMinutes Int       @default(0)
+
+  user User @relation(fields: [userId], references: [id])
+  room Room @relation(fields: [roomId], references: [id])
+
+  @@index([userId, startedAt(sort: Desc)])
+  @@index([roomId])
+}

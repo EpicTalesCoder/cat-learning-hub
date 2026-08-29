@@ -1,0 +1,12 @@
+{
+  "framework": {
+    "name": "nextjs",
+    "settings": {
+      "installCommand": "npm install",
+      "buildCommand": "npx prisma generate && next build",
+      "outputDirectory": ".next",
+      "devCommand": "next dev"
+    }
+  }
+}
+
