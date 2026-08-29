@@ -1,57 +1,51 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
 model User {
-  id           String   @id @default(cuid())
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
   email        String   @unique
   passwordHash String
   name         String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  ownedRooms  Room[]       @relation("owner")
+  ownedRooms  Room[]         @relation("owner")
   memberships RoomMember[]
   sessions    StudySession[]
-
-  @@index([email])
 }
 
 model Room {
-  id          String   @id @default(cuid())
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
   name        String
   description String?
-  ownerId     String
+  ownerId     String   @db.ObjectId
   isPrivate   Boolean  @default(false)
   inviteCode  String   @unique @default(cuid())
   maxMembers  Int      @default(20)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  owner    User         @relation("owner", fields: [ownerId], references: [id])
+  owner    User           @relation("owner", fields: [ownerId], references: [id])
   members  RoomMember[]
   sessions StudySession[]
 
   @@index([ownerId])
-  @@index([inviteCode])
 }
 
 model RoomMember {
-  id       String   @id @default(cuid())
-  roomId   String
-  userId   String
+  id       String   @id @default(auto()) @map("_id") @db.ObjectId
+  roomId   String   @db.ObjectId
+  userId   String   @db.ObjectId
   joinedAt DateTime @default(now())
   lastSeen DateTime @default(now())
 
-  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  room Room @relation(fields: [roomId], references: [id])
   user User @relation(fields: [userId], references: [id])
 
   @@unique([roomId, userId])
@@ -59,9 +53,9 @@ model RoomMember {
 }
 
 model StudySession {
-  id              String    @id @default(cuid())
-  userId          String
-  roomId          String
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String    @db.ObjectId
+  roomId          String    @db.ObjectId
   startedAt       DateTime  @default(now())
   endedAt         DateTime?
   durationMinutes Int       @default(0)
@@ -69,6 +63,6 @@ model StudySession {
   user User @relation(fields: [userId], references: [id])
   room Room @relation(fields: [roomId], references: [id])
 
-  @@index([userId, startedAt(sort: Desc)])
+  @@index([userId, startedAt])
   @@index([roomId])
 }
